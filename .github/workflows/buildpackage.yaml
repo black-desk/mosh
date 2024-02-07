@@ -1,0 +1,34 @@
+on:
+  push:
+    branches:
+      - master
+jobs:
+  buildpackage:
+    env:
+      GH_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build package
+        run: |
+          sudo apt build-dep .
+          sudo apt install git-buildpackage
+          git remote add upstream https://github.com/mobile-shell/mosh
+          git fetch --tags --all
+          VERSION=$(git describe --tags --match mosh-* --long | sed -e 's/mosh-//')
+          sed -i 's/(.*)/('"$VERSION"')/' debian/changelog
+          ./build-package.sh || true
+
+      - name: Release
+        run: |
+          (
+            gh release -R black-desk/mosh list --json tagName | \
+            jq .\[\].tagName -r | \
+            xargs -L1 gh release -R black-desk/mosh delete \
+          ) || true
+          gh release -R black-desk/mosh create --latest "nightly" ../*.deb
